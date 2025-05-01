@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Vulkan_Triangle.vcxproj.filters
+/Vulkan_Triangle.vcxproj
+/PropertySheet.props
+/Vulkan_Triangle.sln
