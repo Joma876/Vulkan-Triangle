@@ -41,6 +41,7 @@ private:
 	void createInstance(); 
 	void createInfo(VkApplicationInfo& appInfo); 
 
+	std::vector<const char*> getRequierdExtensions(); 
 	bool validExtensionsSupport(const char** glfwExtensions, uint32_t size, std::vector<VkExtensionProperties>& extensions);
 	bool validValidationLayerSupport(); 
 
@@ -72,6 +73,7 @@ void HelloTriangleApp::initVulkan() {
 	createInstance(); 
 }
 
+//Struct Creation Functions
 void HelloTriangleApp::createInstance() {
 
 	if (enableValidationLayer && !validValidationLayerSupport()) {
@@ -135,13 +137,12 @@ void HelloTriangleApp::createInfo(VkApplicationInfo& appInfo) {
 }
 
 //Check Functions
-
-bool HelloTriangleApp::validExtensionsSupport(const char** glfwExtensions, uint32_t size, std::vector<VkExtensionProperties>& extensions) {
+bool HelloTriangleApp::validExtensionsSupport(const char** RequiredExtensions, uint32_t size, std::vector<VkExtensionProperties>& AvailableExtensions) {
 	bool Valid = true; 
 	for (uint32_t it = 0; it < size; it++) {
-		for (const auto& extension : extensions) {
-			if (extension.extensionName == std::string(glfwExtensions[it])) break;
-			if (extension.extensionName == extensions.back().extensionName) Valid = false; 
+		for (const auto& extension : AvailableExtensions) {
+			if (extension.extensionName == std::string(RequiredExtensions[it])) break;
+			if (extension.extensionName == AvailableExtensions.back().extensionName) Valid = false; 
 		}
 		if (!Valid) break; 
 	}
@@ -166,6 +167,19 @@ bool HelloTriangleApp::validValidationLayerSupport() {
 	}
 
 	return Valid; 
+}
+
+std::vector<const char*> HelloTriangleApp::getRequierdExtensions(){
+	uint32_t ExtensionCount = 0; 
+	const char** glfwExtensions; 
+
+	glfwExtensions = glfwGetRequiredInstanceExtensions(&ExtensionCount); 
+
+	std::vector<const char*> Extensions(glfwExtensions, glfwExtensions + ExtensionCount); 
+
+	if (enableValidationLayer) Extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); 
+
+	return Extensions; 
 }
 
 void HelloTriangleApp::mainloop() {
