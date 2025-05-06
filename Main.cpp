@@ -39,6 +39,7 @@ private:
 			const bool enableValidationLayer = true; 
 		#endif //  NDEBUG
 
+	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE; 
 
 private: 
 	//GLFW functions
@@ -46,16 +47,20 @@ private:
 
 	//Vk functions
 	void initVulkan();
+	void setupDebugMessenger(); 
 
+	void pickPhysicalDevice(); 
+	
 	//Struct Creation functions
 	void createInstance(); 
 	void createInfo(VkApplicationInfo& appInfo); 
-	void setupDebugMessenger(); 
+	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createDebugInfo); 
 
 	//Check functions
 	std::vector<const char*> getRequierdExtensions(); 
 	bool validExtensionsSupport(std::vector<const char*> RequiredExtensions, std::vector<VkExtensionProperties>& extensions);
 	bool validValidationLayerSupport(); 
+	bool validDevice(VkPhysicalDevice physicalDevice);
 
 	//Debug Message functions
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT MessageSeverity, VkDebugUtilsMessageTypeFlagBitsEXT MessageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData); 
@@ -68,6 +73,7 @@ public:
 	void run() {
 		initWindow(); 
 		initVulkan(); 
+		pickPhysicalDevice(); 
 
 		mainloop(); 
 		cleanup(); 
@@ -90,7 +96,39 @@ void HelloTriangleApp::initVulkan() {
 	setupDebugMessenger();
 }
 
-//Struct Creation Functions
+void HelloTriangleApp::setupDebugMessenger() {
+	if (!enableValidationLayer) return; 
+
+	VkDebugUtilsMessengerCreateInfoEXT createDebugInfo{}; 
+	populateDebugMessengerCreateInfo(createDebugInfo); 
+
+	if (CreateDebugUtilsMessengerEXT(instance, &createDebugInfo, nullptr, &debugMessenger) != VK_SUCCESS) throw std::runtime_error("Failed to set up debug Messenger"); 
+}
+
+//Physical Device Functions 
+
+void HelloTriangleApp::pickPhysicalDevice() {
+	uint32_t deviceCount = 0; 
+	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr); 
+
+	if (deviceCount == 0) {
+		throw std::runtime_error("Failed to find GPUs with Vulkan support"); 
+	}
+
+	std::vector <VkPhysicalDevice> devices(deviceCount); 
+	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()); 
+
+	for (const auto& device : devices) {
+		if (validDevice(device)) {
+			PhysicalDevice = device; 
+			break;
+		}
+	}
+
+	if (PhysicalDevice == VK_NULL_HANDLE) throw std::runtime_error("failed to find a suitable GPU!"); 
+}
+
+//Struct Creation Functions 
 
 void HelloTriangleApp::createInstance() {
 
@@ -120,6 +158,8 @@ void HelloTriangleApp::createInfo(VkApplicationInfo& appInfo) {
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(RequiredExtensions.size()); 
 	createInfo.ppEnabledExtensionNames = RequiredExtensions.data(); 
 	
+
+
 	uint32_t extensionCount = 0; 
 	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
@@ -137,12 +177,22 @@ void HelloTriangleApp::createInfo(VkApplicationInfo& appInfo) {
 		for (const auto& extension : extensions) {
 			std::cout << "\t" << extension.extensionName << "\n"; 
 		}
+		std::cout << "\n"; 
+
+	VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
 
 	if (enableValidationLayer) {
 		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 		createInfo.ppEnabledLayerNames = validationLayers.data();
+
+		populateDebugMessengerCreateInfo(debugCreateInfo); 
+		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo; 
 	}
-	else createInfo.enabledLayerCount = 0; 
+	else {
+		createInfo.enabledLayerCount = 0;
+
+		createInfo.pNext = nullptr; 
+	}
 
 	if (!validExtensionsSupport(RequiredExtensions, extensions)) throw std::runtime_error("Invalid Extensions"); 
 
@@ -150,20 +200,15 @@ void HelloTriangleApp::createInfo(VkApplicationInfo& appInfo) {
 	VkResult result = vkCreateInstance(&createInfo, nullptr, &instance); 
 }
 
-void HelloTriangleApp::setupDebugMessenger() {
-	if (!enableValidationLayer) return; 
-
-	VkDebugUtilsMessengerCreateInfoEXT createDebugInfo{}; 
-	createDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT; 
-	createDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT; 
-	createDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT; 
+void HelloTriangleApp::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createDebugInfo) {
+	createDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	createDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	createDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	createDebugInfo.pfnUserCallback = reinterpret_cast<PFN_vkDebugUtilsMessengerCallbackEXT>(debugCallback);
 	createDebugInfo.pUserData = nullptr;	//Optional
-
-	if (CreateDebugUtilsMessengerEXT(instance, &createDebugInfo, nullptr, &debugMessenger) != VK_SUCCESS) throw std::runtime_error("Failed to set up debug Messenger"); 
 }
 
-//Check Functions
+//Check Functions 
 
 bool HelloTriangleApp::validExtensionsSupport(std::vector<const char*> RequiredExtensions, std::vector<VkExtensionProperties>& AvailableExtensions) {
 	for (const auto& RequierdExtension : RequiredExtensions) {
@@ -195,6 +240,10 @@ bool HelloTriangleApp::validValidationLayerSupport() {
 	return Valid; 
 }
 
+bool HelloTriangleApp::validDevice(VkPhysicalDevice physicalDevice) {
+	return true;
+}
+
 std::vector<const char*> HelloTriangleApp::getRequierdExtensions(){
 	uint32_t ExtensionCount = 0; 
 	const char** glfwExtensions; 
@@ -216,6 +265,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL HelloTriangleApp::debugCallback(VkDebugUtilsMessa
 	return VK_FALSE; 
 }
 
+//Main loop 
+
 void HelloTriangleApp::mainloop() {
 	while (!glfwWindowShouldClose(window))
 	{
@@ -223,6 +274,7 @@ void HelloTriangleApp::mainloop() {
 	}
 }
 
+//Cleanup 
 
 void HelloTriangleApp::cleanup() {
 	if (enableValidationLayer) DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
