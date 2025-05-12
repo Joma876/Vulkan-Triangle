@@ -2,9 +2,11 @@
 #include <GLFW/glfw3.h>
 
 #include <stdexcept>
+#include <optional>
 #include <iostream>
 #include <cstdlib>
 #include <vector>
+#include <map>
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateDebugInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"); 
@@ -16,6 +18,9 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"); 
 	if (func != nullptr) func(instance, debugMessenger, pAllocator); 
 }
+
+struct QueueFamilyIndices;
+
 class HelloTriangleApp {
 
 private: 
@@ -39,7 +44,15 @@ private:
 			const bool enableValidationLayer = true; 
 		#endif //  NDEBUG
 
+	//Phiyiscal Device
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE; 
+
+	struct QueueFamilyIndices {
+		std::optional<uint32_t> graphicsFamily; 
+
+		bool isComplete() { return graphicsFamily.has_value();  }
+	};
+	
 
 private: 
 	//GLFW functions
@@ -49,8 +62,31 @@ private:
 	void initVulkan();
 	void setupDebugMessenger(); 
 
-	void pickPhysicalDevice(); 
-	
+		//Physical Device Functions 
+		void pickPhysicalDevice(); 
+		int ratePhysicalDevice(VkPhysicalDevice device); 
+		QueueFamilyIndices findQueueFamilies(VkPhysicalDevice deivce) {
+			QueueFamilyIndices indices; 
+
+			uint32_t queueFamilyCount = 0; 
+			vkGetPhysicalDeviceQueueFamilyProperties(deivce, &queueFamilyCount, nullptr); 
+			std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount); 
+			vkGetPhysicalDeviceQueueFamilyProperties(deivce, &queueFamilyCount, queueFamilies.data()); 
+
+			int it = 0; 
+
+			for (const auto& queueFamily : queueFamilies) {
+				if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+					indices.graphicsFamily = it; 
+				}
+				if (indices.isComplete()) break; 
+				it++; 
+			}
+
+			return indices; 
+		}
+		
+
 	//Struct Creation functions
 	void createInstance(); 
 	void createInfo(VkApplicationInfo& appInfo); 
@@ -60,7 +96,8 @@ private:
 	std::vector<const char*> getRequierdExtensions(); 
 	bool validExtensionsSupport(std::vector<const char*> RequiredExtensions, std::vector<VkExtensionProperties>& extensions);
 	bool validValidationLayerSupport(); 
-	bool validDevice(VkPhysicalDevice physicalDevice);
+	bool isDeviceSuitable(VkPhysicalDevice device); 
+
 
 	//Debug Message functions
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT MessageSeverity, VkDebugUtilsMessageTypeFlagBitsEXT MessageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData); 
@@ -118,15 +155,38 @@ void HelloTriangleApp::pickPhysicalDevice() {
 	std::vector <VkPhysicalDevice> devices(deviceCount); 
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()); 
 
+	std::multimap<int, VkPhysicalDevice> candidates; 
+
 	for (const auto& device : devices) {
-		if (validDevice(device)) {
-			PhysicalDevice = device; 
-			break;
-		}
+		candidates.insert(std::make_pair(ratePhysicalDevice(device), device)); 
+	}
+
+	for (const auto& currentCandidate : candidates) {
+		if (currentCandidate.first > 0) PhysicalDevice = currentCandidate.second; 
 	}
 
 	if (PhysicalDevice == VK_NULL_HANDLE) throw std::runtime_error("failed to find a suitable GPU!"); 
 }
+
+int HelloTriangleApp::ratePhysicalDevice(VkPhysicalDevice device) {
+	int score = 0; 
+
+	VkPhysicalDeviceProperties deviceProperties;
+	VkPhysicalDeviceFeatures deviceFeatures;
+
+	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+	if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1000; 
+
+	score += deviceProperties.limits.maxImageDimension2D; 
+
+	if (!deviceFeatures.geometryShader) score = 0; 
+
+	return score; 
+}
+
+
 
 //Struct Creation Functions 
 
@@ -240,8 +300,9 @@ bool HelloTriangleApp::validValidationLayerSupport() {
 	return Valid; 
 }
 
-bool HelloTriangleApp::validDevice(VkPhysicalDevice physicalDevice) {
-	return true;
+bool HelloTriangleApp::isDeviceSuitable(VkPhysicalDevice device) {
+	QueueFamilyIndices indicies = findQueueFamilies(device); 
+	return indicies.isComplete(); 
 }
 
 std::vector<const char*> HelloTriangleApp::getRequierdExtensions(){
