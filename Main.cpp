@@ -35,24 +35,34 @@ private:
 	//Vk Variables
 
 	VkInstance instance; 
-	VkDebugUtilsMessengerEXT debugMessenger; 
-		//Vk Validation Layers 
-		const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" }; 
-		#ifdef  NDEBUG
-			const bool enabelValidationLayer = true; 
-		#else
-			const bool enableValidationLayer = true; 
-		#endif //  NDEBUG
 
-	//Phiyiscal Device
-	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE; 
+		//Debug
+		VkDebugUtilsMessengerEXT debugMessenger; 
+			//Vk Validation Layers 
+			const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" }; 
+			#ifdef  NDEBUG
+				const bool enabelValidationLayer = true; 
+			#else
+				const bool enableValidationLayer = true; 
+			#endif //  NDEBUG
 
-	struct QueueFamilyIndices {
-		std::optional<uint32_t> graphicsFamily; 
+		//Phiyiscal Device
+		VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE; 
 
-		bool isComplete() { return graphicsFamily.has_value();  }
-	};
+		struct QueueFamilyIndices {
+			std::optional<uint32_t> graphicsFamily; 
+
+			bool isComplete() { return graphicsFamily.has_value();  }
+		};
+
+
+
+		//Logical device Variables 
+		VkDevice device; 
 	
+			//Device Queues
+			VkQueue graphicsQueue;
+
 
 private: 
 	//GLFW functions
@@ -91,6 +101,7 @@ private:
 	void createInstance(); 
 	void createInfo(VkApplicationInfo& appInfo); 
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createDebugInfo); 
+	void createLogicalDevice(); 
 
 	//Check functions
 	std::vector<const char*> getRequierdExtensions(); 
@@ -110,7 +121,6 @@ public:
 	void run() {
 		initWindow(); 
 		initVulkan(); 
-		pickPhysicalDevice(); 
 
 		mainloop(); 
 		cleanup(); 
@@ -131,6 +141,8 @@ void HelloTriangleApp::initWindow() {
 void HelloTriangleApp::initVulkan() {
 	createInstance(); 
 	setupDebugMessenger();
+	pickPhysicalDevice();
+	createLogicalDevice(); 
 }
 
 void HelloTriangleApp::setupDebugMessenger() {
@@ -268,6 +280,39 @@ void HelloTriangleApp::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCre
 	createDebugInfo.pUserData = nullptr;	//Optional
 }
 
+void HelloTriangleApp::createLogicalDevice() {
+	QueueFamilyIndices indices = findQueueFamilies(PhysicalDevice);
+	float QueuePriority = 1.0f; 
+
+	VkDeviceQueueCreateInfo queueCreateInfo{};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO; 
+	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value(); 
+	queueCreateInfo.queueCount = 1;
+	queueCreateInfo.pQueuePriorities = &QueuePriority; 
+
+	VkPhysicalDeviceFeatures deviceFeatures{}; 
+	//vkGetPhysicalDeviceFeatures(PhysicalDevice, &deviceFeatures); 
+
+	VkDeviceCreateInfo createInfo{}; 
+	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO; 
+	createInfo.pQueueCreateInfos = &queueCreateInfo; 
+	createInfo.queueCreateInfoCount = 1; 
+
+	createInfo.pEnabledFeatures = &deviceFeatures; 
+
+	createInfo.enabledExtensionCount = 0; 
+
+	if (enableValidationLayer) {
+		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		createInfo.ppEnabledLayerNames = validationLayers.data();
+	}
+	else createInfo.enabledLayerCount = 0; 
+
+	if (vkCreateDevice(PhysicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) throw std::runtime_error("Failed to create logical device!"); 
+
+	vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue); 
+}
+
 //Check Functions 
 
 bool HelloTriangleApp::validExtensionsSupport(std::vector<const char*> RequiredExtensions, std::vector<VkExtensionProperties>& AvailableExtensions) {
@@ -305,17 +350,17 @@ bool HelloTriangleApp::isDeviceSuitable(VkPhysicalDevice device) {
 	return indicies.isComplete(); 
 }
 
-std::vector<const char*> HelloTriangleApp::getRequierdExtensions(){
-	uint32_t ExtensionCount = 0; 
-	const char** glfwExtensions; 
+std::vector<const char*> HelloTriangleApp::getRequierdExtensions() {
+	uint32_t ExtensionCount = 0;
+	const char** glfwExtensions;
 
-	glfwExtensions = glfwGetRequiredInstanceExtensions(&ExtensionCount); 
+	glfwExtensions = glfwGetRequiredInstanceExtensions(&ExtensionCount);
 
-	std::vector<const char*> Extensions(glfwExtensions, glfwExtensions + ExtensionCount); 
+	std::vector<const char*> Extensions(glfwExtensions, glfwExtensions + ExtensionCount);
 
-	if (enableValidationLayer) Extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); 
+	if (enableValidationLayer) Extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-	return Extensions; 
+	return Extensions;
 }
 
 //Debug Message functions 
@@ -338,6 +383,8 @@ void HelloTriangleApp::mainloop() {
 //Cleanup 
 
 void HelloTriangleApp::cleanup() {
+
+	vkDestroyDevice(device, nullptr);
 	if (enableValidationLayer) DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 	vkDestroyInstance(instance, nullptr); 
 
