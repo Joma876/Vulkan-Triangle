@@ -82,6 +82,16 @@ private:
 			}
 		};
 
+		VkFormat swapChainImageFormat; 
+		VkExtent2D swapChainExtent; 
+
+		VkSwapchainKHR swapChain;
+
+			//Swap chain Images 
+			std::vector<VkImage> swapChainImages; 
+
+		//Image views 
+		std::vector<VkImageView> swapChainImageViews; 
 
 private: 
 	//GLFW functions
@@ -154,6 +164,12 @@ private:
 		VkPresentModeKHR choosePresnetMode(const std::vector<VkPresentModeKHR> availableModes); 
 		VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilites); 
 
+		void getSwapChainImages(); 
+
+
+		//Image View functions
+		void DestroyImageViews(); 
+		
 
 
 	//Struct Creation functions
@@ -161,6 +177,8 @@ private:
 	void createInfo(VkApplicationInfo& appInfo); 
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createDebugInfo); 
 	void createLogicalDevice(); 
+	void createSwapChain();
+	void createImageViews(); 
 
 	//Check functions
 	std::vector<const char*> getRequierdExtensions(); 
@@ -203,6 +221,8 @@ void HelloTriangleApp::initVulkan() {
 	createSurface(); 
 	pickPhysicalDevice();
 	createLogicalDevice(); 
+	createSwapChain(); 
+	createImageViews(); 
 }
 
 void HelloTriangleApp::setupDebugMessenger() {
@@ -220,7 +240,6 @@ void HelloTriangleApp::createSurface(){
 }
 
 //Physical Device Functions 
-
 void HelloTriangleApp::pickPhysicalDevice() {
 	uint32_t deviceCount = 0; 
 	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr); 
@@ -294,6 +313,22 @@ VkExtent2D HelloTriangleApp::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& ca
 		actualExtent.width = std::clamp(actualExtent.width, capabilites.minImageExtent.width, capabilites.maxImageExtent.width); 
 		actualExtent.height = std::clamp(actualExtent.height, capabilites.minImageExtent.height, capabilites.maxImageExtent.height); 
 		return actualExtent; 
+	}
+}
+
+void HelloTriangleApp::getSwapChainImages(){
+	uint32_t imageCount; 
+	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr); 
+	
+	swapChainImages.resize(imageCount); 
+	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data()); 
+
+}
+
+//Image View functions 
+void HelloTriangleApp::DestroyImageViews(){
+	for (auto imageView : swapChainImageViews) {
+		vkDestroyImageView(device, imageView, nullptr); 
 	}
 }
 
@@ -420,6 +455,82 @@ void HelloTriangleApp::createLogicalDevice() {
 	vkGetDeviceQueue(device, indices.presentationFamily.value(), 0, &presentQueue); 
 }
 
+void HelloTriangleApp::createSwapChain() {
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(PhysicalDevice);
+
+	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats); 
+	VkPresentModeKHR presentMode = choosePresnetMode(swapChainSupport.presentModes); 
+	VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilites); 
+
+	uint32_t imageCount = swapChainSupport.capabilites.minImageCount + 1; 
+
+	if (swapChainSupport.capabilites.maxImageCount > 0 && imageCount > swapChainSupport.capabilites.maxImageCount) imageCount = swapChainSupport.capabilites.maxImageCount; 
+
+	VkSwapchainCreateInfoKHR createInfo{}; 
+	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR; 
+	createInfo.surface = surface; 
+	createInfo.minImageCount = imageCount; 
+	createInfo.imageFormat = surfaceFormat.format; 
+	createInfo.imageColorSpace = surfaceFormat.colorSpace; 
+	createInfo.imageExtent = extent; 
+	createInfo.imageArrayLayers = 1; 
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; 
+
+	QueueFamilyIndices indices = findQueueFamilies(PhysicalDevice); 
+
+	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentationFamily.value() }; 
+
+	if (indices.graphicsFamily != indices.presentationFamily) {
+		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
+		createInfo.queueFamilyIndexCount = 2; 
+		createInfo.pQueueFamilyIndices = queueFamilyIndices; 
+	}
+	else {
+		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; 
+		createInfo.queueFamilyIndexCount = 0; 
+		createInfo.pQueueFamilyIndices = nullptr; 
+	}
+
+	createInfo.preTransform = swapChainSupport.capabilites.currentTransform; 
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
+	createInfo.presentMode = presentMode; 
+	createInfo.clipped = VK_TRUE; 
+	createInfo.oldSwapchain = VK_NULL_HANDLE; 
+
+
+	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) throw std::runtime_error("failed to create Swapchain!"); 
+
+	swapChainExtent = extent; 
+	swapChainImageFormat = surfaceFormat.format; 
+
+	getSwapChainImages(); 
+}
+
+void HelloTriangleApp::createImageViews() {
+	swapChainImageViews.resize(swapChainImages.size()); 
+
+	for (size_t it = 0; it < swapChainImages.size(); it++) {
+		VkImageViewCreateInfo createInfo{}; 
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; 
+		createInfo.image = swapChainImages[it]; 
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; 
+		createInfo.format = swapChainImageFormat; 
+
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; 
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY; 
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY; 
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY; 
+
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; 
+		createInfo.subresourceRange.baseMipLevel = 0; 
+		createInfo.subresourceRange.levelCount = 1; 
+		createInfo.subresourceRange.baseArrayLayer = 0; 
+		createInfo.subresourceRange.layerCount = 1; 
+
+		if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[it]) != VK_SUCCESS) throw std::runtime_error("failed to create Image View!"); 
+	}
+}
+
 //Check Functions 
 
 bool HelloTriangleApp::validExtensionsSupport(std::vector<const char*> RequiredExtensions, std::vector<VkExtensionProperties>& AvailableExtensions) {
@@ -514,7 +625,8 @@ void HelloTriangleApp::mainloop() {
 //Cleanup 
 
 void HelloTriangleApp::cleanup() {
-
+	DestroyImageViews();
+	vkDestroySwapchainKHR(device, swapChain, nullptr); 
 	vkDestroyDevice(device, nullptr);
 	vkDestroySurfaceKHR(instance, surface, nullptr); 
 	if (enableValidationLayer) DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
